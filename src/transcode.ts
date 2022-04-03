@@ -1,12 +1,13 @@
 import AWS from 'aws-sdk';
-// import { PassThrough } from 'stream';
-import { createWriteStream } from 'fs';
+import { PassThrough } from 'stream';
+import { createWriteStream, createReadStream } from 'fs';
 import path from 'path';
+import fs from 'fs';
 import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
 import ffmpeg from 'fluent-ffmpeg';
+import { ManagedUpload } from 'aws-sdk/clients/s3';
 
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
-
 interface IFile {
   key: string;
   bucket: string;
@@ -31,30 +32,32 @@ export default async function transcode(
     Bucket: file.bucket,
     Key: file.key,
   }
-
   const originStream = s3Client.getObject(params).createReadStream();
 
   const destinationFile = file.key.replace(
     '.mp4',
     `_${resolution.suffix}.mp4`
   )
-  const stream = createWriteStream(
-    path.resolve(__dirname, 'tmp', destinationFile)
-  );
 
-  // function uploadFromStream() {
-  //   const passThrough = new PassThrough();
+  function uploadFromStream() {
+    const pass = new PassThrough();
 
-  //   const destinationStream = {
-  //     Bucket: 'vclick-hls-videos',
-  //     Key: destinationFile,
-  //     Body: passThrough,
-  //   };
+    const params = {
+      Bucket: 'vclick-hls-videos',
+      Key: destinationFile,
+      Body: pass,
+    };
 
-  //   s3Client.upload(destinationStream);
+    s3Client.upload(params, (err: Error, data: ManagedUpload.SendData) => {
+      if (err) return console.log(err);
 
-  //   return passThrough;
-  // }
+      console.log(data);
+    });
+
+    return pass;
+  }
+
+  let totalTime: number;
 
   ffmpeg(originStream)
     .withOutputOption('-f mp4')
@@ -67,10 +70,15 @@ export default async function transcode(
     .on('start', cmdLine => {
       console.log(`[${resolution.suffix}] Started FFMpeg`, cmdLine);
     })
-    .on('end', () => {
+    .on('codecData', data => totalTime = parseInt(data.duration.replace(/:/g, '')))
+    .on('progress', (p) => {
+      const time = parseInt(p.timemark.replace(/:/g, ''))
+      const percentage = ((time / totalTime) * 100).toFixed(2);
+      process.stdout.write(`[${resolution.suffix}] ${percentage}%\r`);
+    })
+    .on('end', async () => {
       console.log(`[${resolution.suffix}] Sucess!.`);
-
-      return process.exit(0);
+      // fs.rm(filePath, { force: true }, (err) => console.log(err));
     })
     .on('error', (err: Error, stdout, stderr) => {
       console.log(`[${resolution.suffix}] Error:`, err.message);
@@ -79,6 +87,5 @@ export default async function transcode(
 
       throw new Error(err.message)
     })
-    .pipe(stream, { end: true })
-  // .pipe(uploadFromStream(), { end: true });
+    .pipe(uploadFromStream(), { end: true })
 }
