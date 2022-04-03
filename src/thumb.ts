@@ -7,8 +7,9 @@ ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 const filePath = path.resolve(__dirname, 'assets', 'teste.mp4')
 
 ffmpeg(filePath)
-  .takeScreenshots({
-    count: 1,
-    timemarks: ['5'], // number of seconds
-    filename: 'thumb',
-  }, './src/assets/')
+  .output('./src/assets/screenshot-%03d.jpg')
+  .outputOptions(
+    '-q:v', '8',
+    '-vf', 'fps=1/5,scale=-1:360',
+  )
+  .run()
