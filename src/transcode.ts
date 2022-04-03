@@ -1,8 +1,5 @@
 import AWS from 'aws-sdk';
 import { PassThrough } from 'stream';
-import { createWriteStream, createReadStream } from 'fs';
-import path from 'path';
-import fs from 'fs';
 import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
 import ffmpeg from 'fluent-ffmpeg';
 import { ManagedUpload } from 'aws-sdk/clients/s3';
